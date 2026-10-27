@@ -1,0 +1,5 @@
+streamlit>=1.28
+pandas>=2.0
+cryptography>=42.0
+streamlit-autorefresh>=1.0.1
+Flask>=3.0

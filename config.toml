@@ -1,0 +1,8 @@
+[theme]
+# Deep navy/black background with an electric green accent —
+# matches the UptimeMonitor brand (premium SaaS / DevOps style).
+primaryColor = "#00E676"
+backgroundColor = "#0A0E14"
+secondaryBackgroundColor = "#111A24"
+textColor = "#E8F5E9"
+font = "sans serif"

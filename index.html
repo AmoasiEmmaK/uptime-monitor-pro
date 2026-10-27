@@ -1,0 +1,1108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>UptimeMonitor</title>
+<style>
+  :root {
+    --canvas: #0d141c;
+    --panel: #151f2b;
+    --panel-raised: #1b2736;
+    --line: #24344a;
+    --line-soft: #1d2a3a;
+    --ink: #e8eef5;
+    --ink-dim: #b3c2d3;
+    --muted: #7f92a9;
+    --up: #4fa88c;
+    --slow: #d6a244;
+    --down: #d4605e;
+    --paused: #61738b;
+    --focus: #7fb7e8;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    --sans: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    background: var(--canvas);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  button, input, select { font: inherit; color: inherit; }
+
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+
+  /* ---------- shell ---------- */
+
+  .shell { max-width: 1180px; margin: 0 auto; padding: 0 24px 96px; }
+
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--line-soft);
+    background: var(--panel);
+    position: sticky;
+    top: 0;
+    z-index: 20;
+  }
+
+  .topbar-inner {
+    max-width: 1180px;
+    margin: 0 auto;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .brand {
+    font-size: 1.05rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin: 0;
+  }
+  .brand span { color: var(--up); }
+
+  .topbar-spacer { flex: 1; }
+
+  .who {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+
+  /* ---------- buttons ---------- */
+
+  .btn {
+    background: var(--panel-raised);
+    border: 1px solid var(--line);
+    color: var(--ink);
+    padding: 7px 13px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 0.86rem;
+  }
+  .btn:hover { border-color: #3a4f6b; }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .btn-primary {
+    background: var(--up);
+    border-color: var(--up);
+    color: #08120f;
+    font-weight: 600;
+  }
+  .btn-primary:hover { background: #59b899; border-color: #59b899; }
+  .btn-danger { border-color: #5d3437; color: #eaa6a5; }
+  .btn-danger:hover { border-color: var(--down); }
+  .btn-sm { padding: 4px 9px; font-size: 0.78rem; }
+
+  /* ---------- sign in ---------- */
+
+  .gate {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 32px 24px;
+  }
+  .gate-card {
+    width: 100%;
+    max-width: 380px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 30px 28px;
+  }
+  .gate-card h1 { margin: 0 0 6px; font-size: 1.45rem; letter-spacing: -0.02em; }
+  .gate-card h1 span { color: var(--up); }
+  .gate-sub { margin: 0 0 24px; color: var(--muted); font-size: 0.88rem; }
+
+  .tabs { display: flex; gap: 4px; margin-bottom: 20px; }
+  .tab {
+    flex: 1;
+    background: none;
+    border: 0;
+    border-bottom: 2px solid var(--line);
+    padding: 8px 0;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 0.88rem;
+  }
+  .tab[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--up); }
+
+  .field { margin-bottom: 14px; }
+  .field label {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--ink-dim);
+    margin-bottom: 5px;
+  }
+  .field input, .field select {
+    width: 100%;
+    background: #0a1119;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 8px 10px;
+  }
+  .field input::placeholder { color: #55687e; }
+  .field .hint { font-size: 0.75rem; color: var(--muted); margin-top: 5px; }
+
+  .notice {
+    border-radius: 5px;
+    padding: 9px 11px;
+    font-size: 0.84rem;
+    margin-bottom: 14px;
+  }
+  .notice-error { background: rgba(212, 96, 94, 0.13); border: 1px solid #5d3437; color: #f0b4b3; }
+  .notice-ok { background: rgba(79, 168, 140, 0.13); border: 1px solid #2c5a4c; color: #a5dcc9; }
+
+  /* ---------- headline ---------- */
+
+  .headline { padding: 40px 0 26px; }
+  .headline p {
+    margin: 0;
+    font-size: clamp(1.5rem, 3.6vw, 2.15rem);
+    line-height: 1.25;
+    letter-spacing: -0.02em;
+    max-width: 22ch;
+  }
+  .headline .stamp {
+    font-family: var(--mono);
+    font-size: 0.76rem;
+    color: var(--muted);
+    margin-top: 14px;
+  }
+  .dot-up { color: var(--up); }
+  .dot-slow { color: var(--slow); }
+  .dot-down { color: var(--down); }
+
+  .stale {
+    border: 1px solid #5a4a26;
+    background: rgba(214, 162, 68, 0.12);
+    color: #e6c98a;
+    border-radius: 6px;
+    padding: 10px 13px;
+    font-size: 0.85rem;
+    margin-bottom: 18px;
+  }
+
+  /* ---------- summary ---------- */
+
+  .tallies {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--panel);
+    margin-bottom: 26px;
+  }
+  .tally {
+    flex: 1 1 110px;
+    padding: 13px 16px;
+    border-right: 1px solid var(--line-soft);
+  }
+  .tally:last-child { border-right: 0; }
+  .tally .n {
+    font-family: var(--mono);
+    font-size: 1.5rem;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+  }
+  .tally .k { font-size: 0.78rem; color: var(--muted); margin-top: 3px; }
+
+  /* ---------- controls ---------- */
+
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 9px;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+  .controls input[type="search"] {
+    flex: 1 1 210px;
+    min-width: 170px;
+    background: #0a1119;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 7px 11px;
+  }
+  .controls select {
+    background: #0a1119;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 7px 9px;
+  }
+
+  /* ---------- service rows ---------- */
+
+  .services { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+
+  .svc { border-bottom: 1px solid var(--line-soft); background: var(--panel); }
+  .svc:last-child { border-bottom: 0; }
+
+  .svc-head {
+    display: grid;
+    grid-template-columns: 10px minmax(0, 1.5fr) minmax(0, 2fr) auto auto;
+    gap: 16px;
+    align-items: center;
+    padding: 14px 18px;
+    width: 100%;
+    background: none;
+    border: 0;
+    text-align: left;
+    cursor: pointer;
+  }
+  .svc-head:hover { background: var(--panel-raised); }
+
+  .pip { width: 9px; height: 9px; border-radius: 50%; }
+  .pip.up { background: var(--up); }
+  .pip.slow { background: var(--slow); }
+  .pip.down { background: var(--down); }
+  .pip.maintenance { background: var(--paused); }
+  .pip.pending, .pip.paused { background: #33465e; }
+
+  .svc-name { font-weight: 600; letter-spacing: -0.01em; }
+  .svc-addr {
+    font-family: var(--mono);
+    font-size: 0.76rem;
+    color: var(--muted);
+    margin-top: 2px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .strip { display: flex; gap: 2px; align-items: flex-end; height: 26px; }
+  .strip i {
+    flex: 1;
+    min-width: 2px;
+    max-width: 5px;
+    border-radius: 1px;
+    background: #24344a;
+  }
+  .strip i.up { background: var(--up); height: 60%; }
+  .strip i.slow { background: var(--slow); height: 80%; }
+  .strip i.down { background: var(--down); height: 100%; }
+
+  .svc-latency {
+    font-family: var(--mono);
+    font-size: 0.86rem;
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    white-space: nowrap;
+  }
+  .svc-latency small { display: block; color: var(--muted); font-size: 0.72rem; }
+
+  .chev { color: var(--muted); font-size: 0.7rem; }
+
+  /* ---------- detail ---------- */
+
+  .detail {
+    padding: 4px 18px 20px;
+    border-top: 1px solid var(--line-soft);
+    background: #111a25;
+  }
+  .detail-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 14px;
+    margin: 16px 0;
+  }
+  .stat .n { font-family: var(--mono); font-size: 1.1rem; font-variant-numeric: tabular-nums; }
+  .stat .k { font-size: 0.75rem; color: var(--muted); }
+
+  .chart-label { font-size: 0.8rem; color: var(--ink-dim); margin: 14px 0 6px; }
+  .chart { width: 100%; height: 92px; display: block; }
+  .chart-empty { color: var(--muted); font-size: 0.83rem; padding: 12px 0; }
+
+  .detail-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+
+  .edit-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 12px;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--line-soft);
+  }
+  .check-row { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; }
+
+  /* ---------- tables ---------- */
+
+  .section { margin-top: 44px; }
+  .section h2 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 0 0 4px;
+    letter-spacing: -0.01em;
+  }
+  .section .lede { color: var(--muted); font-size: 0.84rem; margin: 0 0 14px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  thead th {
+    text-align: left;
+    font-weight: 500;
+    color: var(--muted);
+    font-size: 0.78rem;
+    padding: 0 12px 8px;
+    border-bottom: 1px solid var(--line);
+  }
+  tbody td { padding: 9px 12px; border-bottom: 1px solid var(--line-soft); }
+  tbody tr:last-child td { border-bottom: 0; }
+  td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .table-wrap {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--panel);
+    padding: 14px 6px 6px;
+    overflow-x: auto;
+  }
+
+  .empty {
+    border: 1px dashed var(--line);
+    border-radius: 8px;
+    padding: 36px 24px;
+    text-align: center;
+    color: var(--muted);
+  }
+  .empty strong { display: block; color: var(--ink); margin-bottom: 6px; font-size: 1rem; }
+
+  /* ---------- add panel ---------- */
+
+  .add-panel {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--panel);
+    padding: 18px;
+    margin-bottom: 26px;
+  }
+  .add-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 12px;
+  }
+
+  .toast {
+    position: fixed;
+    right: 20px;
+    bottom: 20px;
+    background: var(--panel-raised);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--up);
+    border-radius: 6px;
+    padding: 11px 15px;
+    font-size: 0.86rem;
+    max-width: 340px;
+    z-index: 50;
+  }
+  .toast.bad { border-left-color: var(--down); }
+
+  @media (max-width: 720px) {
+    .shell { padding: 0 16px 72px; }
+    .svc-head { grid-template-columns: 10px 1fr auto; row-gap: 10px; }
+    .strip { grid-column: 1 / -1; }
+    .chev { display: none; }
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  var CHECK_TYPES = {
+    ping:     { label: "Ping",     hint: "IP or hostname",      placeholder: "192.168.1.1" },
+    http:     { label: "HTTP",     hint: "full URL",            placeholder: "https://intranet.example.com" },
+    api:      { label: "API",      hint: "health endpoint URL", placeholder: "https://api.example.com/health" },
+    tcp:      { label: "TCP port", hint: "host:port",           placeholder: "192.168.1.10:3306" },
+    dns:      { label: "DNS",      hint: "hostname to resolve", placeholder: "intranet.example.com" },
+    database: { label: "Database", hint: "path to SQLite file", placeholder: "C:/data/app.db" }
+  };
+
+  var WINDOWS = [
+    { hours: 1,   label: "Last hour" },
+    { hours: 6,   label: "Last 6 hours" },
+    { hours: 24,  label: "Last 24 hours" },
+    { hours: 72,  label: "Last 3 days" },
+    { hours: 168, label: "Last 7 days" },
+    { hours: 720, label: "Last 30 days" }
+  ];
+
+  var state = {
+    user: null,
+    data: null,
+    hours: 24,
+    query: "",
+    filter: "all",
+    expanded: null,
+    refreshSeconds: 60,
+    busy: false,
+    toast: null
+  };
+
+  var refreshTimer = null;
+  var toastTimer = null;
+  var root = document.getElementById("root");
+
+  // ---------- helpers ----------
+
+  function api(path, options) {
+    options = options || {};
+    var config = { method: options.method || "GET", credentials: "same-origin", headers: {} };
+    if (options.body) {
+      config.headers["Content-Type"] = "application/json";
+      config.body = JSON.stringify(options.body);
+    }
+    return fetch(path, config).then(function (response) {
+      return response.json().catch(function () { return {}; }).then(function (payload) {
+        if (!response.ok) throw new Error(payload.error || "Something went wrong. Try again.");
+        return payload;
+      });
+    });
+  }
+
+  function esc(value) {
+    return String(value == null ? "" : value).replace(/[&<>"']/g, function (ch) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch];
+    });
+  }
+
+  function ago(iso) {
+    if (!iso) return "never";
+    var then = new Date(iso.indexOf("Z") === -1 && iso.indexOf("+") === -1 ? iso + "Z" : iso);
+    var seconds = Math.round((Date.now() - then.getTime()) / 1000);
+    if (seconds < 10) return "just now";
+    if (seconds < 90) return seconds + "s ago";
+    var minutes = Math.round(seconds / 60);
+    if (minutes < 90) return minutes + "m ago";
+    var hours = Math.round(minutes / 60);
+    if (hours < 36) return hours + "h ago";
+    return Math.round(hours / 24) + "d ago";
+  }
+
+  function clockTime(iso) {
+    if (!iso) return "—";
+    var d = new Date(iso.indexOf("Z") === -1 && iso.indexOf("+") === -1 ? iso + "Z" : iso);
+    return d.toLocaleString(undefined, {
+      month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit"
+    });
+  }
+
+  function duration(startIso, endIso) {
+    if (!endIso) return "ongoing";
+    var start = new Date(startIso.indexOf("Z") === -1 ? startIso + "Z" : startIso);
+    var end = new Date(endIso.indexOf("Z") === -1 ? endIso + "Z" : endIso);
+    var seconds = Math.max(0, Math.round((end - start) / 1000));
+    var h = Math.floor(seconds / 3600);
+    var m = Math.floor((seconds % 3600) / 60);
+    var s = seconds % 60;
+    if (h) return h + "h " + m + "m";
+    if (m) return m + "m " + s + "s";
+    return s + "s";
+  }
+
+  function pct(value) { return value == null ? "—" : value.toFixed(2) + "%"; }
+  function ms(value) { return value == null ? "—" : Math.round(value) + " ms"; }
+
+  function toast(message, bad) {
+    state.toast = { message: message, bad: !!bad };
+    render();
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { state.toast = null; render(); }, 3600);
+  }
+
+  // ---------- data ----------
+
+  function loadDashboard() {
+    return api("/api/dashboard?hours=" + state.hours).then(function (payload) {
+      state.data = payload;
+      render();
+    }).catch(function (error) {
+      if (String(error.message).indexOf("signed in") !== -1) {
+        state.user = null;
+        state.data = null;
+      }
+      render();
+    });
+  }
+
+  function scheduleRefresh() {
+    clearInterval(refreshTimer);
+    if (state.user && state.refreshSeconds > 0) {
+      refreshTimer = setInterval(loadDashboard, state.refreshSeconds * 1000);
+    }
+  }
+
+  // ---------- sign in view ----------
+
+  var gate = { mode: "login", error: null, ok: null };
+
+  function renderGate() {
+    root.innerHTML =
+      '<div class="gate"><div class="gate-card">' +
+        '<h1>Uptime<span>Monitor</span></h1>' +
+        '<p class="gate-sub">Sign in to see the services on your account.</p>' +
+        '<div class="tabs" role="tablist">' +
+          '<button class="tab" role="tab" data-mode="login" aria-selected="' + (gate.mode === "login") + '">Sign in</button>' +
+          '<button class="tab" role="tab" data-mode="signup" aria-selected="' + (gate.mode === "signup") + '">Create account</button>' +
+        '</div>' +
+        (gate.error ? '<div class="notice notice-error">' + esc(gate.error) + '</div>' : "") +
+        (gate.ok ? '<div class="notice notice-ok">' + esc(gate.ok) + '</div>' : "") +
+        '<form id="gate-form">' +
+          '<div class="field"><label for="g-email">Email</label>' +
+            '<input id="g-email" type="email" autocomplete="username" required></div>' +
+          '<div class="field"><label for="g-password">Password</label>' +
+            '<input id="g-password" type="password" autocomplete="current-password" required>' +
+            (gate.mode === "signup" ? '<div class="hint">At least 8 characters.</div>' : "") +
+          '</div>' +
+          '<button class="btn btn-primary" style="width:100%" type="submit">' +
+            (gate.mode === "login" ? "Sign in" : "Create account") +
+          '</button>' +
+        '</form>' +
+      '</div></div>';
+
+    Array.prototype.forEach.call(root.querySelectorAll(".tab"), function (tab) {
+      tab.onclick = function () {
+        gate.mode = tab.dataset.mode;
+        gate.error = null;
+        gate.ok = null;
+        renderGate();
+      };
+    });
+
+    root.querySelector("#gate-form").onsubmit = function (event) {
+      event.preventDefault();
+      var email = root.querySelector("#g-email").value;
+      var password = root.querySelector("#g-password").value;
+      gate.error = null;
+      gate.ok = null;
+
+      if (gate.mode === "signup") {
+        api("/api/signup", { method: "POST", body: { email: email, password: password } })
+          .then(function () {
+            gate.mode = "login";
+            gate.ok = "Account created. Sign in to continue.";
+            renderGate();
+          })
+          .catch(function (error) { gate.error = error.message; renderGate(); });
+      } else {
+        api("/api/login", { method: "POST", body: { email: email, password: password } })
+          .then(function (user) {
+            state.user = user;
+            return loadDashboard();
+          })
+          .then(scheduleRefresh)
+          .catch(function (error) { gate.error = error.message; renderGate(); });
+      }
+    };
+
+    var emailField = root.querySelector("#g-email");
+    if (emailField) emailField.focus();
+  }
+
+  // ---------- pieces ----------
+
+  function headlineFor(summary) {
+    if (!summary || !summary.active) {
+      return { text: "Nothing is being monitored yet.", cls: "" };
+    }
+    if (summary.down) {
+      return {
+        text: summary.down + (summary.down === 1 ? " service is down." : " services are down."),
+        cls: "dot-down"
+      };
+    }
+    if (summary.slow) {
+      return {
+        text: summary.slow + (summary.slow === 1 ? " service is responding slowly." : " services are responding slowly."),
+        cls: "dot-slow"
+      };
+    }
+    if (summary.pending === summary.active) {
+      return { text: "Waiting for the first round of checks.", cls: "" };
+    }
+    return { text: "Everything is responding normally.", cls: "dot-up" };
+  }
+
+  function stripHtml(strip, degradedMs) {
+    var cells = [];
+    var pad = 48 - strip.length;
+    for (var i = 0; i < pad; i++) cells.push("<i></i>");
+    strip.forEach(function (check) {
+      var cls = "down";
+      if (check.is_up) {
+        cls = (check.response_time_ms != null && check.response_time_ms >= degradedMs) ? "slow" : "up";
+      }
+      cells.push('<i class="' + cls + '" title="' + esc(clockTime(check.timestamp)) + '"></i>');
+    });
+    return '<div class="strip" aria-hidden="true">' + cells.join("") + "</div>";
+  }
+
+  function latencyChart(history) {
+    var points = history.filter(function (h) { return h.response_time_ms != null; });
+    if (points.length < 2) return '<div class="chart-empty">Not enough response data in this window yet.</div>';
+
+    var width = 640, height = 92, padY = 8;
+    var values = points.map(function (p) { return p.response_time_ms; });
+    var max = Math.max.apply(null, values);
+    var min = Math.min.apply(null, values);
+    if (max === min) { max = max + 1; min = Math.max(0, min - 1); }
+
+    var coords = points.map(function (p, i) {
+      var x = (i / (points.length - 1)) * width;
+      var y = height - padY - ((p.response_time_ms - min) / (max - min)) * (height - padY * 2);
+      return [x, y];
+    });
+
+    var line = coords.map(function (c, i) {
+      return (i ? "L" : "M") + c[0].toFixed(1) + " " + c[1].toFixed(1);
+    }).join(" ");
+    var area = line + " L" + width + " " + height + " L0 " + height + " Z";
+
+    return '<svg class="chart" viewBox="0 0 ' + width + " " + height + '" preserveAspectRatio="none" role="img" ' +
+      'aria-label="Response time, ' + Math.round(min) + " to " + Math.round(max) + ' milliseconds">' +
+      '<path d="' + area + '" fill="rgba(79,168,140,0.12)"></path>' +
+      '<path d="' + line + '" fill="none" stroke="#4fa88c" stroke-width="1.6" ' +
+        'stroke-linejoin="round" vector-effect="non-scaling-stroke"></path>' +
+      "</svg>" +
+      '<div class="svc-addr" style="margin-top:6px">peak ' + Math.round(max) + " ms · floor " + Math.round(min) + " ms</div>";
+  }
+
+  function typeOptions(selected) {
+    return Object.keys(CHECK_TYPES).map(function (code) {
+      return '<option value="' + code + '"' + (code === selected ? " selected" : "") + ">" +
+        CHECK_TYPES[code].label + "</option>";
+    }).join("");
+  }
+
+  function serviceDetail(svc) {
+    var w = svc.window;
+    return '<div class="detail">' +
+      '<div class="detail-grid">' +
+        '<div class="stat"><div class="n">' + pct(w.uptime) + '</div><div class="k">uptime this window</div></div>' +
+        '<div class="stat"><div class="n">' + ms(w.avg_response_ms) + '</div><div class="k">average response</div></div>' +
+        '<div class="stat"><div class="n">' + w.failed + " / " + w.checks + '</div><div class="k">failed checks</div></div>' +
+        '<div class="stat"><div class="n">' + pct(svc.uptime_7d) + '</div><div class="k">7-day uptime</div></div>' +
+        '<div class="stat"><div class="n">' + pct(svc.uptime_30d) + '</div><div class="k">30-day uptime</div></div>' +
+      "</div>" +
+      '<div class="chart-label">Response time</div>' +
+      latencyChart(svc.history) +
+      '<div class="detail-actions">' +
+        '<button class="btn btn-sm" data-act="check" data-id="' + svc.id + '">Check now</button>' +
+        '<button class="btn btn-sm" data-act="toggle" data-id="' + svc.id + '" data-active="' + (!svc.active) + '">' +
+          (svc.active ? "Pause monitoring" : "Resume monitoring") + "</button>" +
+        '<button class="btn btn-sm btn-danger" data-act="delete" data-id="' + svc.id + '">Delete service</button>' +
+      "</div>" +
+      '<form class="edit-grid" data-act="save" data-id="' + svc.id + '">' +
+        '<div class="field"><label>Name</label><input name="name" value="' + esc(svc.name) + '" required></div>' +
+        '<div class="field"><label>Check method</label><select name="check_type">' + typeOptions(svc.check_type) + "</select></div>" +
+        '<div class="field"><label>Target</label><input name="address" value="' + esc(svc.address) + '" required></div>' +
+        '<div class="field"><label>Alert after</label>' +
+          '<input name="alert_threshold" type="number" min="1" max="10" value="' + svc.alert_threshold + '">' +
+          '<div class="hint">consecutive failed checks</div></div>' +
+        '<div class="field"><div class="check-row">' +
+          '<input type="checkbox" name="maintenance_mode" id="m-' + svc.id + '"' + (svc.maintenance_mode ? " checked" : "") + ">" +
+          '<label for="m-' + svc.id + '" style="margin:0">In maintenance — hold alerts</label>' +
+        "</div>" +
+        '<button class="btn btn-sm btn-primary" type="submit" style="margin-top:10px">Save changes</button>' +
+        "</div>" +
+      "</form>" +
+    "</div>";
+  }
+
+  function serviceRow(svc, degradedMs) {
+    var open = state.expanded === svc.id;
+    var latest = svc.latest;
+    var latency = "—";
+    var stamp = "never checked";
+
+    if (latest) {
+      latency = latest.is_up ? ms(latest.response_time_ms) : "no reply";
+      stamp = ago(latest.timestamp);
+    }
+
+    var badge = CHECK_TYPES[svc.check_type] ? CHECK_TYPES[svc.check_type].label : svc.check_type;
+    var stateNote = "";
+    if (svc.state === "maintenance") stateNote = " · in maintenance";
+    else if (svc.state === "paused") stateNote = " · paused";
+    else if (svc.state === "pending") stateNote = " · no checks yet";
+
+    return '<div class="svc">' +
+      '<button class="svc-head" data-act="expand" data-id="' + svc.id + '" aria-expanded="' + open + '">' +
+        '<span class="pip ' + svc.state + '"></span>' +
+        "<span><span class=\"svc-name\">" + esc(svc.name) + "</span>" +
+          '<span class="svc-addr">' + esc(svc.address) + " · " + esc(badge) + esc(stateNote) + "</span></span>" +
+        stripHtml(svc.strip, degradedMs) +
+        '<span class="svc-latency">' + latency + "<small>" + stamp + "</small></span>" +
+        '<span class="chev">' + (open ? "▲" : "▼") + "</span>" +
+      "</button>" +
+      (open ? serviceDetail(svc) : "") +
+    "</div>";
+  }
+
+  function visibleServices() {
+    var query = state.query.trim().toLowerCase();
+    return state.data.services.filter(function (svc) {
+      if (query &&
+          svc.name.toLowerCase().indexOf(query) === -1 &&
+          svc.address.toLowerCase().indexOf(query) === -1) return false;
+      if (state.filter === "all") return true;
+      return svc.state === state.filter;
+    });
+  }
+
+  function incidentsTable() {
+    var incidents = state.data.incidents;
+    if (!incidents.length) {
+      return '<div class="empty">No incidents recorded. That is the good outcome.</div>';
+    }
+    var rows = incidents.map(function (inc) {
+      return "<tr>" +
+        "<td>" + esc(inc.name) + "</td>" +
+        '<td class="num">' + clockTime(inc.started_at) + "</td>" +
+        '<td class="num">' + duration(inc.started_at, inc.ended_at) + "</td>" +
+        "<td>" + (inc.ended_at ? "recovered" : '<span class="dot-down">still down</span>') + "</td>" +
+        '<td style="color:var(--muted)">' + esc(inc.note || "") + "</td>" +
+      "</tr>";
+    }).join("");
+    return '<div class="table-wrap"><table>' +
+      "<thead><tr><th>Service</th><th>Started</th><th>Duration</th><th>Outcome</th><th>Note</th></tr></thead>" +
+      "<tbody>" + rows + "</tbody></table></div>";
+  }
+
+  function checksTable() {
+    var checks = state.data.recent_checks;
+    if (!checks.length) {
+      return '<div class="empty">No checks logged yet. Start monitor.py and the first results land within a minute.</div>';
+    }
+    var rows = checks.map(function (check) {
+      return "<tr>" +
+        '<td class="num">' + clockTime(check.timestamp) + "</td>" +
+        "<td>" + esc(check.name) + "</td>" +
+        "<td>" + esc(CHECK_TYPES[check.check_type] ? CHECK_TYPES[check.check_type].label : check.check_type) + "</td>" +
+        '<td class="' + (check.is_up ? "dot-up" : "dot-down") + '">' + (check.is_up ? "up" : "down") + "</td>" +
+        '<td class="num">' + ms(check.response_time_ms) + "</td>" +
+      "</tr>";
+    }).join("");
+    return '<div class="table-wrap"><table>' +
+      "<thead><tr><th>Time</th><th>Service</th><th>Method</th><th>Result</th><th>Response</th></tr></thead>" +
+      "<tbody>" + rows + "</tbody></table></div>";
+  }
+
+  function analyticsTable() {
+    var services = state.data.services;
+    if (!services.length) return "";
+    var rows = services.map(function (svc) {
+      return "<tr>" +
+        "<td>" + esc(svc.name) + "</td>" +
+        '<td class="num">' + pct(svc.uptime_24h) + "</td>" +
+        '<td class="num">' + pct(svc.uptime_7d) + "</td>" +
+        '<td class="num">' + pct(svc.uptime_30d) + "</td>" +
+        '<td class="num">' + svc.failed_24h + "</td>" +
+        '<td class="num">' + ms(svc.avg_response_24h) + "</td>" +
+      "</tr>";
+    }).join("");
+    return '<div class="table-wrap"><table>' +
+      "<thead><tr><th>Service</th><th>24 hours</th><th>7 days</th><th>30 days</th>" +
+      "<th>Failed (24h)</th><th>Avg response (24h)</th></tr></thead>" +
+      "<tbody>" + rows + "</tbody></table></div>";
+  }
+
+  function staleBanner() {
+    var last = state.data.last_check_at;
+    if (!last) {
+      return '<div class="stale">No checks have been logged yet. Run <code>python monitor.py</code> ' +
+        "in a second terminal — this page only reads what it writes.</div>";
+    }
+    var then = new Date(last.indexOf("Z") === -1 && last.indexOf("+") === -1 ? last + "Z" : last);
+    var minutes = (Date.now() - then.getTime()) / 60000;
+    if (minutes < 3) return "";
+    return '<div class="stale">The newest check is ' + Math.round(minutes) +
+      " minutes old. Check that monitor.py is still running.</div>";
+  }
+
+  // ---------- main view ----------
+
+  function renderApp() {
+    var data = state.data;
+    var summary = data.summary;
+    var head = headlineFor(summary);
+    var services = visibleServices();
+
+    root.innerHTML =
+      '<header class="topbar"><div class="topbar-inner">' +
+        '<h1 class="brand">Uptime<span>Monitor</span></h1>' +
+        '<div class="topbar-spacer"></div>' +
+        '<span class="who">' + esc(state.user.email) + "</span>" +
+        '<button class="btn btn-sm" data-act="check-all">Check all now</button>' +
+        '<button class="btn btn-sm" data-act="signout">Sign out</button>' +
+      "</div></header>" +
+
+      '<main class="shell">' +
+        '<section class="headline">' +
+          "<p class=\"" + head.cls + "\">" + esc(head.text) + "</p>" +
+          '<div class="stamp">' + summary.active + " monitored · last check " + ago(data.last_check_at) +
+            (state.refreshSeconds ? " · refreshing every " + state.refreshSeconds + "s" : " · auto-refresh off") +
+          "</div>" +
+        "</section>" +
+
+        staleBanner() +
+
+        '<div class="tallies">' +
+          '<div class="tally"><div class="n dot-up">' + summary.up + '</div><div class="k">up</div></div>' +
+          '<div class="tally"><div class="n dot-slow">' + summary.slow + '</div><div class="k">slow</div></div>' +
+          '<div class="tally"><div class="n dot-down">' + summary.down + '</div><div class="k">down</div></div>' +
+          '<div class="tally"><div class="n">' + summary.maintenance + '</div><div class="k">maintenance</div></div>' +
+          '<div class="tally"><div class="n">' + summary.paused + '</div><div class="k">paused</div></div>' +
+          '<div class="tally"><div class="n">' + pct(summary.overall_uptime) + '</div><div class="k">uptime this window</div></div>' +
+        "</div>" +
+
+        '<div class="controls">' +
+          '<input type="search" id="q" placeholder="Search name or address" value="' + esc(state.query) + '">' +
+          '<select id="filter">' +
+            ["all", "up", "slow", "down", "maintenance", "pending", "paused"].map(function (value) {
+              var labels = { all: "All services", up: "Up", slow: "Slow", down: "Down",
+                             maintenance: "In maintenance", pending: "No checks yet", paused: "Paused" };
+              return '<option value="' + value + '"' + (state.filter === value ? " selected" : "") + ">" +
+                labels[value] + "</option>";
+            }).join("") +
+          "</select>" +
+          '<select id="window">' +
+            WINDOWS.map(function (w) {
+              return '<option value="' + w.hours + '"' + (state.hours === w.hours ? " selected" : "") + ">" +
+                w.label + "</option>";
+            }).join("") +
+          "</select>" +
+          '<select id="refresh">' +
+            [0, 30, 60, 300].map(function (seconds) {
+              var label = seconds === 0 ? "Manual refresh" : "Refresh every " + (seconds >= 60 ? seconds / 60 + "m" : seconds + "s");
+              return '<option value="' + seconds + '"' + (state.refreshSeconds === seconds ? " selected" : "") + ">" + label + "</option>";
+            }).join("") +
+          "</select>" +
+          '<button class="btn" data-act="reload">Refresh</button>' +
+          '<button class="btn btn-primary" data-act="show-add">Add service</button>' +
+        "</div>" +
+
+        (state.showAdd ? addPanel() : "") +
+
+        (data.services.length === 0
+          ? '<div class="empty"><strong>No services yet</strong>' +
+            "Add the first thing you want watched — a router IP, an intranet URL, a database port.</div>"
+          : services.length === 0
+            ? '<div class="empty">No services match that search.</div>'
+            : '<div class="services">' +
+                services.map(function (svc) { return serviceRow(svc, data.degraded_ms); }).join("") +
+              "</div>") +
+
+        '<section class="section"><h2>Uptime by service</h2>' +
+          '<p class="lede">Longer windows only fill in once the monitor has been running that long.</p>' +
+          analyticsTable() + "</section>" +
+
+        '<section class="section"><h2>Incidents</h2>' +
+          '<p class="lede">Opened when a service passes its failure threshold, closed when it answers again.</p>' +
+          incidentsTable() + "</section>" +
+
+        '<section class="section"><h2>Latest checks</h2>' +
+          '<p class="lede">The most recent results written by monitor.py.</p>' +
+          checksTable() + "</section>" +
+      "</main>" +
+
+      (state.toast ? '<div class="toast' + (state.toast.bad ? " bad" : "") + '">' + esc(state.toast.message) + "</div>" : "");
+
+    wire();
+  }
+
+  function addPanel() {
+    return '<form class="add-panel" data-act="add">' +
+      '<h2 style="margin:0 0 4px;font-size:1rem">Add a service</h2>' +
+      '<p class="lede">The background monitor picks it up on its next cycle.</p>' +
+      '<div class="add-grid">' +
+        '<div class="field"><label for="a-name">Name</label>' +
+          '<input id="a-name" name="name" placeholder="Branch office router" required></div>' +
+        '<div class="field"><label for="a-type">Check method</label>' +
+          '<select id="a-type" name="check_type">' + typeOptions("ping") + "</select></div>" +
+        '<div class="field"><label for="a-addr">Target</label>' +
+          '<input id="a-addr" name="address" placeholder="' + CHECK_TYPES.ping.placeholder + '" required>' +
+          '<div class="hint" id="a-hint">' + CHECK_TYPES.ping.hint + "</div></div>" +
+        '<div class="field"><label for="a-threshold">Alert after</label>' +
+          '<input id="a-threshold" name="alert_threshold" type="number" min="1" max="10" value="1">' +
+          '<div class="hint">consecutive failed checks</div></div>' +
+      "</div>" +
+      '<div class="detail-actions">' +
+        '<button class="btn btn-primary" type="submit">Add service</button>' +
+        '<button class="btn" type="button" data-act="hide-add">Cancel</button>' +
+      "</div>" +
+    "</form>";
+  }
+
+  // ---------- events ----------
+
+  function formValues(form) {
+    return {
+      name: form.name.value,
+      address: form.address.value,
+      check_type: form.check_type.value,
+      alert_threshold: form.alert_threshold.value,
+      maintenance_mode: form.maintenance_mode ? form.maintenance_mode.checked : false
+    };
+  }
+
+  function wire() {
+    var search = root.querySelector("#q");
+    if (search) {
+      search.oninput = function () {
+        state.query = search.value;
+        var position = search.selectionStart;
+        render();
+        var next = root.querySelector("#q");
+        if (next) { next.focus(); next.setSelectionRange(position, position); }
+      };
+    }
+
+    var filter = root.querySelector("#filter");
+    if (filter) filter.onchange = function () { state.filter = filter.value; render(); };
+
+    var windowSelect = root.querySelector("#window");
+    if (windowSelect) windowSelect.onchange = function () {
+      state.hours = Number(windowSelect.value);
+      loadDashboard();
+    };
+
+    var refresh = root.querySelector("#refresh");
+    if (refresh) refresh.onchange = function () {
+      state.refreshSeconds = Number(refresh.value);
+      scheduleRefresh();
+      render();
+    };
+
+    var typeSelect = root.querySelector("#a-type");
+    if (typeSelect) typeSelect.onchange = function () {
+      var meta = CHECK_TYPES[typeSelect.value];
+      root.querySelector("#a-addr").placeholder = meta.placeholder;
+      root.querySelector("#a-hint").textContent = meta.hint;
+    };
+
+    Array.prototype.forEach.call(root.querySelectorAll("[data-act]"), function (element) {
+      var action = element.dataset.act;
+
+      if (element.tagName === "FORM") {
+        element.onsubmit = function (event) {
+          event.preventDefault();
+          if (action === "add") {
+            api("/api/servers", { method: "POST", body: formValues(element) })
+              .then(function (result) {
+                state.showAdd = false;
+                toast(result.message);
+                return loadDashboard();
+              })
+              .catch(function (error) { toast(error.message, true); });
+          } else if (action === "save") {
+            api("/api/servers/" + element.dataset.id, { method: "PUT", body: formValues(element) })
+              .then(function (result) { toast(result.message); return loadDashboard(); })
+              .catch(function (error) { toast(error.message, true); });
+          }
+        };
+        return;
+      }
+
+      element.onclick = function (event) {
+        event.preventDefault();
+        var id = element.dataset.id;
+
+        if (action === "expand") {
+          state.expanded = state.expanded === Number(id) ? null : Number(id);
+          render();
+        } else if (action === "reload") {
+          loadDashboard();
+        } else if (action === "show-add") {
+          state.showAdd = true;
+          render();
+          var first = root.querySelector("#a-name");
+          if (first) first.focus();
+        } else if (action === "hide-add") {
+          state.showAdd = false;
+          render();
+        } else if (action === "signout") {
+          api("/api/logout", { method: "POST" }).then(function () {
+            state.user = null;
+            state.data = null;
+            clearInterval(refreshTimer);
+            render();
+          });
+        } else if (action === "check-all") {
+          element.disabled = true;
+          element.textContent = "Checking…";
+          api("/api/check-all", { method: "POST" })
+            .then(function (result) {
+              toast("Checked " + result.checked + " service" + (result.checked === 1 ? "" : "s") + ".");
+              return loadDashboard();
+            })
+            .catch(function (error) { toast(error.message, true); });
+        } else if (action === "check") {
+          element.disabled = true;
+          element.textContent = "Checking…";
+          api("/api/servers/" + id + "/check", { method: "POST" })
+            .then(function (result) {
+              toast(result.is_up ? "Responded in " + ms(result.response_time_ms) + "." : "No response.", !result.is_up);
+              return loadDashboard();
+            })
+            .catch(function (error) { toast(error.message, true); });
+        } else if (action === "toggle") {
+          api("/api/servers/" + id + "/active", { method: "POST", body: { active: element.dataset.active === "true" } })
+            .then(function (result) { toast(result.message); return loadDashboard(); })
+            .catch(function (error) { toast(error.message, true); });
+        } else if (action === "delete") {
+          if (!confirm("Delete this service and all of its check and incident history? This cannot be undone.")) return;
+          api("/api/servers/" + id, { method: "DELETE" })
+            .then(function (result) {
+              state.expanded = null;
+              toast(result.message);
+              return loadDashboard();
+            })
+            .catch(function (error) { toast(error.message, true); });
+        }
+      };
+    });
+  }
+
+  function render() {
+    if (!state.user) { renderGate(); return; }
+    if (!state.data) { root.innerHTML = '<div class="gate"><p style="color:var(--muted)">Loading…</p></div>'; return; }
+    renderApp();
+  }
+
+  // ---------- start ----------
+
+  api("/api/me")
+    .then(function (result) {
+      if (result.signed_in) {
+        state.user = result;
+        return loadDashboard().then(scheduleRefresh);
+      }
+      render();
+    })
+    .catch(function () { render(); });
+})();
+</script>
+</body>
+</html>
